@@ -1,0 +1,94 @@
+import React, { useState, useEffect } from "react";
+import Web3 from "web3";
+import NFTClaimContract from "./contracts/NFTClaim.json";
+import NFTContractABI from "./contracts/NFTContractABI.json";
+import { ERC20 } from "@openzeppelin/contracts";
+
+const App = () => {
+  const [web3, setWeb3] = useState(null);
+  const [accounts, setAccounts] = useState([]);
+  const [nftContract, setNFTContract] = useState(null);
+  const [nftBalance, setNFTBalance] = useState(0);
+  const [tokenAmountPerNFT, setTokenAmountPerNFT] = useState(10);
+  const [claimedTokens, setClaimedTokens] = useState(0);
+
+  useEffect(() => {
+    // Initialize web3 and contract
+    const init = async () => {
+      try {
+        // Connect to Web3 provider
+        if (window.ethereum) {
+          const web3 = new Web3(window.ethereum);
+          await window.ethereum.enable();
+          setWeb3(web3);
+        }
+        // Legacy dapp browsers
+        else if (window.web3) {
+          const web3 = new Web3(window.web3.currentProvider);
+          setWeb3(web3);
+        }
+        // Non-dapp browsers
+        else {
+          console.log("Non-Ethereum browser detected. You should consider trying MetaMask!");
+        }
+
+        // Load accounts
+        const accounts = await web3.eth.getAccounts();
+        setAccounts(accounts);
+
+        // Load smart contracts
+        const nftContract = new web3.eth.Contract(
+          NFTContractABI,
+          "0xE8E2B12e02cefC12603e99cd414d9D9Ec82068cF"
+        );
+        setNFTContract(nftContract);
+
+        const deployedNetwork = NFTClaimContract.networks[web3.eth.net.getId()];
+        const claimContract = new web3.eth.Contract(
+          NFTClaimContract.abi,
+          deployedNetwork && deployedNetwork.address
+        );
+        setClaimContract(claimContract);
+
+        // Fetch NFT balance
+        const balance = await nftContract.methods.balanceOf(accounts[0]).call();
+        setNFTBalance(balance);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    init();
+  }, []);
+
+  const handleClaimTokens = async () => {
+    try {
+      const tokenContract = new web3.eth.Contract(
+        ERC20.abi,
+        "0xCD9151507de715e3c6FCf64fFA6DFCE7d38B9269"
+      );
+
+      await claimContract.methods.claimTokens().send({ from: accounts[0] });
+
+      const tokensToClaim = nftBalance * tokenAmountPerNFT;
+      await tokenContract.methods.transfer(accounts[0], tokensToClaim).send({ from: accounts[0] });
+
+      setClaimedTokens(tokensToClaim);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  return (
+    <div>
+      <h1>NFT Token Claim DApp</h1>
+      <p>Connected Account: {accounts[0]}</p>
+      <p>NFT Balance: {nftBalance}</p>
+      <p>Token Amount per NFT: {tokenAmountPerNFT}</p>
+      <p>Claimed Tokens: {claimedTokens}</p>
+      <button onClick={handleClaimTokens}>Claim Tokens</button>
+    </div>
+  );
+};
+
+export default App;
